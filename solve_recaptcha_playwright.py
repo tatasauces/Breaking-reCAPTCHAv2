@@ -19,10 +19,6 @@ import os
 import requests
 from PIL import Image
 from io import BytesIO
-import tensorflow as tf
-import tensorflow.keras as keras
-import numpy as np
-from tensorflow.keras.utils import load_img, img_to_array
 from models.YOLO_Classification import predict
 from models.YOLO_Segment import predict as predict_segment
 import time
@@ -37,9 +33,7 @@ CAPTCHA_URL = "https://www.google.com/recaptcha/api2/demo"
 THRESHOLD = 0.2
 USE_TOP_N_STRATEGY = False
 N = 3
-CLASSES = ["bicycle", "bridge", "bus", "car", "chimney", "crosswalk", "hydrant", "motorcycle", "other", "palm", "stairs", "traffic"]
 YOLO_CLASSES = ['bicycle', 'bridge', 'bus', 'car', 'chimney', 'crosswalk', 'hydrant', 'motorcycle', 'mountain', 'other', 'palm', 'traffic']
-MODEL = "YOLO" # "YOLO"
 TYPE1 = True #one time image selection
 TYPE2 = True #segmentation problem
 TYPE3 = True #dynamic captcha
@@ -48,10 +42,9 @@ ENABLE_VPN = False
 ENABLE_MOUSE_MOVEMENT = True
 ENABLE_NATURAL_MOUSE_MOVEMENT = True
 ENABLE_COOKIES = True
-PATH_TO_FIREFOX_PROFILE = '.../Application Support/Firefox/Profiles/wtjovf77.default-release'
 
 def set_variables(variables):
-    global CAPTCHA_URL, THRESHOLD, USE_TOP_N_STRATEGY, N, CLASSES, YOLO_CLASSES, MODEL, TYPE1, TYPE2, TYPE3, ENABLE_LOGS, ENABLE_VPN, ENABLE_MOUSE_MOVEMENT, ENABLE_NATURAL_MOUSE_MOVEMENT, ENABLE_COOKIES
+    global CAPTCHA_URL, THRESHOLD, USE_TOP_N_STRATEGY, N, YOLO_CLASSES, TYPE1, TYPE2, TYPE3, ENABLE_LOGS, ENABLE_VPN, ENABLE_MOUSE_MOVEMENT, ENABLE_NATURAL_MOUSE_MOVEMENT, ENABLE_COOKIES
     if 'CAPTCHA_URL' in variables:
         CAPTCHA_URL = variables['CAPTCHA_URL']
     if 'THRESHOLD' in variables:
@@ -60,12 +53,8 @@ def set_variables(variables):
         USE_TOP_N_STRATEGY = variables['USE_TOP_N_STRATEGY']
     if 'N' in variables:
         N = variables['N']
-    if 'CLASSES' in variables:
-        CLASSES = variables['CLASSES']
     if 'YOLO_CLASSES' in variables:
         YOLO_CLASSES = variables['YOLO_CLASSES']
-    if 'MODEL' in variables:
-        MODEL = variables['MODEL']
     if 'TYPE1' in variables:
         TYPE1 = variables['TYPE1']
     if 'TYPE2' in variables:
@@ -83,32 +72,10 @@ def set_variables(variables):
     if 'ENABLE_COOKIES' in variables:
         ENABLE_COOKIES = variables['ENABLE_COOKIES']
 
-#suppress tensorflow logs
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.FATAL)
-
 # Check if data dir is present
 data_dir = os.path.join(os.getcwd(), "data")
 os.makedirs(data_dir, exist_ok=True)
 
-def getFirstModel():
-    model_path = "models/Base_Line/first_model.h5"
-    model = keras.models.load_model(model_path, compile=False)
-    model.compile(optimizer=tf.keras.optimizers.Adam(),
-                 loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
-                 metrics=["accuracy"])
-    return model
-
-
-
-
-def predict_tile(tile, model):
-    #resize the image
-
-    i = img_to_array(tile)
-    to_predict = i.reshape((-1,224,224,3))
-    prediction = model.predict(to_predict)
-    #return a list of the prediction array, the class name with highest probability and its index
-    return [ prediction, CLASSES[np.argmax(prediction)], np.argmax(prediction)  ]
 
 
 
@@ -171,9 +138,7 @@ def save_global_variables():
     with open(os.path.join(session_folder, 'global_variables.txt'), 'w') as file:
         file.write(f'CAPTCHA_URL = {CAPTCHA_URL}\n')
         file.write(f'THRESHOLD = {THRESHOLD}\n')
-        file.write(f'CLASSES = {CLASSES}\n')
         file.write(f'YOLO_CLASSES = {YOLO_CLASSES}\n')
-        file.write(f'MODEL = {MODEL}\n')
         file.write(f'TYPE1 = {TYPE1}\n')
         file.write(f'TYPE2 = {TYPE2}\n')
         file.write(f'TYPE3 = {TYPE3}\n')
@@ -258,7 +223,7 @@ async def click_element_playwright(locator):
     """
     await locator.click()
 
-async def process_tile_playwright(page, i, model, captcha_object_text, class_index):
+async def process_tile_playwright(page, i, captcha_object_text, class_index):
     """
     Processes a single tile of the reCAPTCHA challenge.
     Takes a screenshot of the tile, classifies it using the ML model, and clicks on it if it matches the criteria.
@@ -275,17 +240,9 @@ async def process_tile_playwright(page, i, model, captcha_object_text, class_ind
     screenshot_path = os.path.join(data_dir, filename)
     await tile_locator.screenshot(path=screenshot_path)
 
-    img = Image.open(screenshot_path).convert('RGB')
-    img = img.resize(size=(224, 224))
-
-    if MODEL == "YOLO":
-        result = predict.predict_tile(screenshot_path)
-        current_object_probability = result[0][class_index]
-        object_name = YOLO_CLASSES[result[2]]
-    else:
-        result = predict_tile(img, model)
-        current_object_probability = result[0][0][class_index]
-        object_name = CLASSES[result[2]]
+    result = predict.predict_tile(screenshot_path)
+    current_object_probability = result[0][class_index]
+    object_name = YOLO_CLASSES[result[2]]
 
     # rename image
     os.rename(screenshot_path, os.path.join(data_dir, f"{object_name}_{filename}"))
@@ -325,9 +282,9 @@ async def solve_type2_playwright(page):
     log("Type2", captcha_text)
 
     class_index = -1
-    for i in CLASSES:
+    for i in YOLO_CLASSES:
         if i in captcha_text:
-            class_index = CLASSES.index(i)
+            class_index = YOLO_CLASSES.index(i)
             break
 
     if class_index == -1:
@@ -364,15 +321,12 @@ def get_class_index(captcha_object_text):
     """
     Gets the class index for a given captcha object text.
     """
-    for i in CLASSES:
+    for i in YOLO_CLASSES:
         if i in captcha_object_text:
-            if MODEL == "YOLO":
-                try:
-                    return YOLO_CLASSES.index(i)
-                except ValueError:
-                    return -1
-            else:
-                return CLASSES.index(i)
+            try:
+                return YOLO_CLASSES.index(i)
+            except ValueError:
+                return -1
     return -1
 
 async def captcha_is_solved_playwright(page):
@@ -393,7 +347,7 @@ async def captcha_is_solved_playwright(page):
     except Exception:
         return False
 
-async def handle_dynamic_captcha_playwright(page, model, captcha_object_text, class_index, to_check):
+async def handle_dynamic_captcha_playwright(page, captcha_object_text, class_index, to_check):
     """
     Handles the dynamic reCAPTCHA challenges where new images appear after a correct selection.
     """
@@ -412,7 +366,7 @@ async def handle_dynamic_captcha_playwright(page, model, captcha_object_text, cl
 
         indices_to_remove = []
         for i in to_check:
-            if await process_tile_playwright(page, i, model, captcha_object_text, class_index):
+            if await process_tile_playwright(page, i, captcha_object_text, class_index):
                 clicked_in_iteration = True
             else:
                 indices_to_remove.append(i)
@@ -438,7 +392,7 @@ async def handle_dynamic_captcha_playwright(page, model, captcha_object_text, cl
         print("The 'select more images' text did not appear.")
 
 
-async def solve_classification_type_playwright(page, model, dynamic_captcha):
+async def solve_classification_type_playwright(page, dynamic_captcha):
     """
     Solves the classification-based reCAPTCHA challenges (3x3 grid).
     """
@@ -461,11 +415,11 @@ async def solve_classification_type_playwright(page, model, dynamic_captcha):
 
     to_check = []
     for i in range(9):
-        if await process_tile_playwright(page, i, model, captcha_object_text, class_index):
+        if await process_tile_playwright(page, i, captcha_object_text, class_index):
             to_check.append(i)
 
     if dynamic_captcha:
-        await handle_dynamic_captcha_playwright(page, model, captcha_object_text, class_index, to_check)
+        await handle_dynamic_captcha_playwright(page, captcha_object_text, class_index, to_check)
     else:
         verify_button_locator = challenge_frame_locator.locator("#recaptcha-verify-button")
         await click_element_playwright(verify_button_locator)
@@ -478,7 +432,6 @@ async def solve_recaptcha_on_page(page):
     :param page: The Playwright page object.
     :return: True if the captcha is solved successfully, False otherwise.
     """
-    model = getFirstModel()
     while True:
         try:
             challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
@@ -489,10 +442,10 @@ async def solve_recaptcha_on_page(page):
                 await solve_type2_playwright(page)
             elif "none" in imageselect_text and TYPE3:
                 print("found a 3x3 dynamic captcha")
-                await solve_classification_type_playwright(page, model, True)
+                await solve_classification_type_playwright(page, True)
             elif TYPE1:
                 print("found a 3x3 one time selection captcha")
-                await solve_classification_type_playwright(page, model, False)
+                await solve_classification_type_playwright(page, False)
             else:
                 reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
                 await click_element_playwright(reload_button_locator)
