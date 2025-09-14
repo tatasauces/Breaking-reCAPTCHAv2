@@ -1,3 +1,18 @@
+"""
+This script provides a reusable API to solve reCAPTCHA v2 challenges using Playwright and a machine learning model.
+It can be used as a standalone script to solve the reCAPTCHA on the demo page, or it can be imported as a library
+into other Playwright scripts.
+
+To use it as a library, import the `solve_recaptcha_on_page` function:
+
+    from solve_recaptcha_playwright import solve_recaptcha_on_page
+
+Then, in your async Playwright script, call this function with your `page` object when a reCAPTCHA challenge is visible:
+
+    is_solved = await solve_recaptcha_on_page(page)
+
+The function will return `True` if the captcha is solved successfully, and `False` otherwise.
+"""
 import asyncio
 from playwright.async_api import async_playwright
 import os
@@ -244,6 +259,10 @@ async def click_element_playwright(locator):
     await locator.click()
 
 async def process_tile_playwright(page, i, model, captcha_object_text, class_index):
+    """
+    Processes a single tile of the reCAPTCHA challenge.
+    Takes a screenshot of the tile, classifies it using the ML model, and clicks on it if it matches the criteria.
+    """
     global COUNT
     print(f"Processing tile with class index {class_index}")
 
@@ -289,6 +308,9 @@ async def process_tile_playwright(page, i, model, captcha_object_text, class_ind
 
 
 async def solve_type2_playwright(page):
+    """
+    Solves the 4x4 segmentation-based reCAPTCHA challenge.
+    """
     save_path = "temp"
     os.makedirs(save_path, exist_ok=True)
 
@@ -448,52 +470,70 @@ async def solve_classification_type_playwright(page, model, dynamic_captcha):
         verify_button_locator = challenge_frame_locator.locator("#recaptcha-verify-button")
         await click_element_playwright(verify_button_locator)
 
+async def solve_recaptcha_on_page(page):
+    """
+    Solves the reCAPTCHA challenge on the given Playwright page.
+    Assumes that the page is already at a state where a reCAPTCHA challenge is visible.
+
+    :param page: The Playwright page object.
+    :return: True if the captcha is solved successfully, False otherwise.
+    """
+    model = getFirstModel()
+    while True:
+        try:
+            challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
+            imageselect_text = await challenge_frame_locator.locator('#rc-imageselect').inner_text()
+
+            if "squares" in imageselect_text and TYPE2:
+                print("found a 4x4 segmentation problem")
+                await solve_type2_playwright(page)
+            elif "none" in imageselect_text and TYPE3:
+                print("found a 3x3 dynamic captcha")
+                await solve_classification_type_playwright(page, model, True)
+            elif TYPE1:
+                print("found a 3x3 one time selection captcha")
+                await solve_classification_type_playwright(page, model, False)
+            else:
+                reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
+                await click_element_playwright(reload_button_locator)
+                continue
+
+            if await captcha_is_solved_playwright(page):
+                log("SOLVED", "captcha solved")
+                return True
+        except Exception as e:
+            print("error occurred:", e)
+            traceback.print_exc()
+            if await captcha_is_solved_playwright(page):
+                log("SOLVED", "captcha solved")
+                return True
+            try:
+                challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
+                reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
+                await click_element_playwright(reload_button_locator)
+            except Exception as reload_e:
+                print(f"Could not reload captcha: {reload_e}")
+                return False
+            continue
+    return False
+
+
 async def run_async():
     """
     The main asynchronous function to run the reCAPTCHA solver.
+    This function serves as a demo of the `solve_recaptcha_on_page` API.
     """
-    model = getFirstModel()
     async with async_playwright() as p:
         page, context, browser = await open_browser_with_captcha_playwright(p)
         if not page:
-            return False
+            return
 
-        while True:
-            try:
-                challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
-                imageselect_text = await challenge_frame_locator.locator('#rc-imageselect').inner_text()
+        is_solved = await solve_recaptcha_on_page(page)
 
-                if "squares" in imageselect_text and TYPE2:
-                    print("found a 4x4 segmentation problem")
-                    await solve_type2_playwright(page)
-                elif "none" in imageselect_text and TYPE3:
-                    print("found a 3x3 dynamic captcha")
-                    await solve_classification_type_playwright(page, model, True)
-                elif TYPE1:
-                    print("found a 3x3 one time selection captcha")
-                    await solve_classification_type_playwright(page, model, False)
-                else:
-                    reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
-                    await click_element_playwright(reload_button_locator)
-                    continue
-
-                if await captcha_is_solved_playwright(page):
-                    log("SOLVED", "captcha solved")
-                    break
-            except Exception as e:
-                print("error occurred:", e)
-                traceback.print_exc()
-                if await captcha_is_solved_playwright(page):
-                    log("SOLVED", "captcha solved")
-                    break
-                try:
-                    challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
-                    reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
-                    await click_element_playwright(reload_button_locator)
-                except Exception as reload_e:
-                    print(f"Could not reload captcha: {reload_e}")
-                    break
-                continue
+        if is_solved:
+            print("Captcha solved successfully by the API.")
+        else:
+            print("Failed to solve the captcha using the API.")
 
         if ENABLE_VPN:
             vpn.disconnect()
