@@ -34,6 +34,20 @@ THRESHOLD = 0.2
 USE_TOP_N_STRATEGY = False
 N = 3
 YOLO_CLASSES = ['bicycle', 'bridge', 'bus', 'car', 'chimney', 'crosswalk', 'hydrant', 'motorcycle', 'mountain', 'other', 'palm', 'traffic']
+CHINESE_TO_ENGLISH_MAPPING = {
+    "公車": "bus",
+    "行人穿越道": "crosswalk",
+    "消防栓": "hydrant",
+    "腳踏車": "bicycle",
+    "機車": "motorcycle",
+    "汽車": "car",
+    "橋": "bridge",
+    "煙囪": "chimney",
+    "棕櫚樹": "palm",
+    "樓梯": "stairs",
+    "紅綠燈": "traffic",
+    "交通號誌": "traffic",
+}
 TYPE1 = True #one time image selection
 TYPE2 = True #segmentation problem
 TYPE3 = True #dynamic captcha
@@ -157,7 +171,7 @@ def reset_globals():
     log_filename = None
 
 
-async def open_browser_with_captcha_playwright(playwright):
+async def open_browser_with_captcha(playwright):
     """
     Launches a browser, navigates to the reCAPTCHA demo page, and handles the initial checkbox click.
 
@@ -216,14 +230,14 @@ async def open_browser_with_captcha_playwright(playwright):
         return None, None, None
 
 
-async def click_element_playwright(locator):
+async def click_element(locator):
     """
     Clicks on a Playwright Locator.
     This is a simplified version of the original click_element function.
     """
     await locator.click()
 
-async def process_tile_playwright(page, i, captcha_object_text, class_index):
+async def process_tile(page, i, captcha_object_text, class_index):
     """
     Processes a single tile of the reCAPTCHA challenge.
     Takes a screenshot of the tile, classifies it using the ML model, and clicks on it if it matches the criteria.
@@ -253,18 +267,18 @@ async def process_tile_playwright(page, i, captcha_object_text, class_index):
     if USE_TOP_N_STRATEGY:
         top_n_indices = sorted(range(len(result[0])), key=lambda i: result[0][i], reverse=True)[:N]
         if class_index in top_n_indices:
-            await click_element_playwright(tile_locator)
+            await click_element(tile_locator)
             return True
     else:
         if current_object_probability > THRESHOLD:
             print(f"{current_object_probability} > {THRESHOLD}")
-            await click_element_playwright(tile_locator)
+            await click_element(tile_locator)
             return True
 
     return False
 
 
-async def solve_type2_playwright(page):
+async def solve_type2(page):
     """
     Solves the 4x4 segmentation-based reCAPTCHA challenge.
     """
@@ -309,27 +323,37 @@ async def solve_type2_playwright(page):
 
         for i, j in tiles_to_click:
             tile_locator = challenge_frame_locator.locator(f"{xpath_tiles}/tr[{i}]/td[{j}]")
-            await click_element_playwright(tile_locator)
+            await click_element(tile_locator)
             await page.wait_for_timeout(500) # a short delay
 
     verify_button_locator = challenge_frame_locator.locator("#recaptcha-verify-button")
-    await click_element_playwright(verify_button_locator)
+    await click_element(verify_button_locator)
     await page.wait_for_timeout(500)
 
 
 def get_class_index(captcha_object_text):
     """
     Gets the class index for a given captcha object text.
+    Handles both English and Chinese labels.
     """
-    for i in YOLO_CLASSES:
-        if i in captcha_object_text:
-            try:
-                return YOLO_CLASSES.index(i)
-            except ValueError:
-                return -1
+    # First, check for a direct match in the Chinese mapping
+    english_class_name = CHINESE_TO_ENGLISH_MAPPING.get(captcha_object_text)
+
+    if english_class_name:
+        try:
+            return YOLO_CLASSES.index(english_class_name)
+        except ValueError:
+            return -1 # Mapped name is not in our YOLO classes
+
+    # If no direct Chinese match, search for an English class name as a substring
+    # This handles cases like "Select all images with cars"
+    for yolo_class in YOLO_CLASSES:
+        if yolo_class in captcha_object_text:
+            return YOLO_CLASSES.index(yolo_class)
+
     return -1
 
-async def captcha_is_solved_playwright(page):
+async def captcha_is_solved(page):
     """
     Checks if the reCAPTCHA challenge is solved.
     """
@@ -347,7 +371,7 @@ async def captcha_is_solved_playwright(page):
     except Exception:
         return False
 
-async def handle_dynamic_captcha_playwright(page, captcha_object_text, class_index, to_check):
+async def handle_dynamic_captcha(page, captcha_object_text, class_index, to_check):
     """
     Handles the dynamic reCAPTCHA challenges where new images appear after a correct selection.
     """
@@ -355,7 +379,7 @@ async def handle_dynamic_captcha_playwright(page, captcha_object_text, class_ind
 
     if not to_check:
         verify_button_locator = challenge_frame_locator.locator("#recaptcha-verify-button")
-        await click_element_playwright(verify_button_locator)
+        await click_element(verify_button_locator)
         await page.wait_for_timeout(1000)
         return
 
@@ -366,7 +390,7 @@ async def handle_dynamic_captcha_playwright(page, captcha_object_text, class_ind
 
         indices_to_remove = []
         for i in to_check:
-            if await process_tile_playwright(page, i, captcha_object_text, class_index):
+            if await process_tile(page, i, captcha_object_text, class_index):
                 clicked_in_iteration = True
             else:
                 indices_to_remove.append(i)
@@ -379,7 +403,7 @@ async def handle_dynamic_captcha_playwright(page, captcha_object_text, class_ind
             break
 
     verify_button_locator = challenge_frame_locator.locator("#recaptcha-verify-button")
-    await click_element_playwright(verify_button_locator)
+    await click_element(verify_button_locator)
     await page.wait_for_timeout(2000)
 
     try:
@@ -387,12 +411,12 @@ async def handle_dynamic_captcha_playwright(page, captcha_object_text, class_ind
         if await error_message_locator.is_visible():
             print("The 'select more images' text appeared.")
             reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
-            await click_element_playwright(reload_button_locator)
+            await click_element(reload_button_locator)
     except Exception:
         print("The 'select more images' text did not appear.")
 
 
-async def solve_classification_type_playwright(page, dynamic_captcha):
+async def solve_classification_type(page, dynamic_captcha):
     """
     Solves the classification-based reCAPTCHA challenges (3x3 grid).
     """
@@ -405,7 +429,7 @@ async def solve_classification_type_playwright(page, dynamic_captcha):
     if class_index == -1:
         print(f"Could not find class index for: {captcha_object_text}")
         reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
-        await click_element_playwright(reload_button_locator)
+        await click_element(reload_button_locator)
         return
 
     if dynamic_captcha:
@@ -415,14 +439,14 @@ async def solve_classification_type_playwright(page, dynamic_captcha):
 
     to_check = []
     for i in range(9):
-        if await process_tile_playwright(page, i, captcha_object_text, class_index):
+        if await process_tile(page, i, captcha_object_text, class_index):
             to_check.append(i)
 
     if dynamic_captcha:
-        await handle_dynamic_captcha_playwright(page, captcha_object_text, class_index, to_check)
+        await handle_dynamic_captcha(page, captcha_object_text, class_index, to_check)
     else:
         verify_button_locator = challenge_frame_locator.locator("#recaptcha-verify-button")
-        await click_element_playwright(verify_button_locator)
+        await click_element(verify_button_locator)
 
 async def solve_recaptcha_on_page(page):
     """
@@ -439,31 +463,31 @@ async def solve_recaptcha_on_page(page):
 
             if "squares" in imageselect_text and TYPE2:
                 print("found a 4x4 segmentation problem")
-                await solve_type2_playwright(page)
+                await solve_type2(page)
             elif "none" in imageselect_text and TYPE3:
                 print("found a 3x3 dynamic captcha")
-                await solve_classification_type_playwright(page, True)
+                await solve_classification_type(page, True)
             elif TYPE1:
                 print("found a 3x3 one time selection captcha")
-                await solve_classification_type_playwright(page, False)
+                await solve_classification_type(page, False)
             else:
                 reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
-                await click_element_playwright(reload_button_locator)
+                await click_element(reload_button_locator)
                 continue
 
-            if await captcha_is_solved_playwright(page):
+            if await captcha_is_solved(page):
                 log("SOLVED", "captcha solved")
                 return True
         except Exception as e:
             print("error occurred:", e)
             traceback.print_exc()
-            if await captcha_is_solved_playwright(page):
+            if await captcha_is_solved(page):
                 log("SOLVED", "captcha solved")
                 return True
             try:
                 challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
                 reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
-                await click_element_playwright(reload_button_locator)
+                await click_element(reload_button_locator)
             except Exception as reload_e:
                 print(f"Could not reload captcha: {reload_e}")
                 return False
@@ -477,7 +501,7 @@ async def run_async():
     This function serves as a demo of the `solve_recaptcha_on_page` API.
     """
     async with async_playwright() as p:
-        page, context, browser = await open_browser_with_captcha_playwright(p)
+        page, context, browser = await open_browser_with_captcha(p)
         if not page:
             return
 
