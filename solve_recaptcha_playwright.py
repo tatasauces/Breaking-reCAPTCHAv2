@@ -191,7 +191,7 @@ async def open_browser_with_captcha_playwright(playwright):
                 await recaptcha_frame_locator.locator(".recaptcha-checkbox-border").click(timeout=5000)
 
                 # Wait for the challenge iframe to become visible
-                challenge_frame_selector = "iframe[title='recaptcha challenge expires in two minutes']"
+                challenge_frame_selector = "iframe[src*='bframe']"
                 await page.wait_for_selector(challenge_frame_selector, state="visible", timeout=10000)
 
                 print("Opened the browser with the captcha.")
@@ -231,7 +231,7 @@ async def process_tile_playwright(page, i, captcha_object_text, class_index):
     global COUNT
     print(f"Processing tile with class index {class_index}")
 
-    challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
+    challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
 
     xpath = f"//td[contains(@tabindex, '{i+4}')]"
     tile_locator = challenge_frame_locator.locator(xpath)
@@ -271,7 +271,7 @@ async def solve_type2_playwright(page):
     save_path = "temp"
     os.makedirs(save_path, exist_ok=True)
 
-    challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
+    challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
 
     xpath_image = "/html/body/div/div/div[2]/div[2]/div/table/tbody/tr[1]/td[1]/div/div[1]/img"
     xpath_text = "/html/body/div/div/div[2]/div[1]/div[1]/div/strong"
@@ -351,7 +351,7 @@ async def handle_dynamic_captcha_playwright(page, captcha_object_text, class_ind
     """
     Handles the dynamic reCAPTCHA challenges where new images appear after a correct selection.
     """
-    challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
+    challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
 
     if not to_check:
         verify_button_locator = challenge_frame_locator.locator("#recaptcha-verify-button")
@@ -396,7 +396,7 @@ async def solve_classification_type_playwright(page, dynamic_captcha):
     """
     Solves the classification-based reCAPTCHA challenges (3x3 grid).
     """
-    challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
+    challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
 
     captcha_object_locator = challenge_frame_locator.locator('#rc-imageselect strong')
     captcha_object_text = await captcha_object_locator.inner_text()
@@ -434,7 +434,7 @@ async def solve_recaptcha_on_page(page):
     """
     while True:
         try:
-            challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
+            challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
             imageselect_text = await challenge_frame_locator.locator('#rc-imageselect').inner_text()
 
             if "squares" in imageselect_text and TYPE2:
@@ -461,7 +461,7 @@ async def solve_recaptcha_on_page(page):
                 log("SOLVED", "captcha solved")
                 return True
             try:
-                challenge_frame_locator = page.frame_locator("iframe[title='recaptcha challenge expires in two minutes']")
+                challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
                 reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
                 await click_element_playwright(reload_button_locator)
             except Exception as reload_e:
