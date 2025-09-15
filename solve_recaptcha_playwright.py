@@ -36,15 +36,21 @@ N = 3
 YOLO_CLASSES = predict.get_class_names()
 CHINESE_TO_ENGLISH_MAPPING = {
     "公車": "bus",
+    "巴士": "bus",
     "行人穿越道": "crosswalk",
+    "斑馬線": "crosswalk",
     "消防栓": "hydrant",
     "腳踏車": "bicycle",
     "機車": "motorcycle",
+    "機車/腳踏車": "motorcycle", # Mapping to motorcycle for now
     "汽車": "car",
     "橋": "bridge",
+    "橋樑": "bridge",
     "煙囪": "chimney",
     "棕櫚樹": "palm",
+    "樹木": "palm", # Assuming tree maps to palm
     "樓梯": "stairs",
+    "梯子": "stairs", # Assuming ladder maps to stairs
     "紅綠燈": "traffic",
     "交通號誌": "traffic",
 }
@@ -341,20 +347,21 @@ def get_class_index(captcha_object_text):
     Gets the class index for a given captcha object text.
     Handles both English and Chinese labels.
     """
-    # First, check for a direct match in the Chinese mapping
+    # First, check for a direct match in the Chinese mapping to get the English name
     english_class_name = CHINESE_TO_ENGLISH_MAPPING.get(captcha_object_text)
 
+    # If we have a mapped English name, find its index
     if english_class_name:
-        try:
-            return YOLO_CLASSES.index(english_class_name)
-        except ValueError:
-            return -1 # Mapped name is not in our YOLO classes
+        for index, name in YOLO_CLASSES.items():
+            if name == english_class_name:
+                return index
+        return -1 # Mapped name not found in model's classes
 
     # If no direct Chinese match, search for an English class name as a substring
     # This handles cases like "Select all images with cars"
-    for yolo_class in YOLO_CLASSES:
-        if yolo_class in captcha_object_text:
-            return YOLO_CLASSES.index(yolo_class)
+    for index, name in YOLO_CLASSES.items():
+        if name in captcha_object_text:
+            return index
 
     return -1
 
