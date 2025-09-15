@@ -247,7 +247,7 @@ async def process_tile(page, i, captcha_object_text, class_index):
 
     challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
 
-    xpath = f"//td[contains(@tabindex, '{i+4}')]"
+    xpath = f"//td[@id='{i}']"
     tile_locator = challenge_frame_locator.locator(xpath)
 
     filename = f"tile_{COUNT}.jpg"
@@ -434,7 +434,7 @@ async def solve_classification_type(page, dynamic_captcha):
 
     # Wait for the image grid to be visible before proceeding
     try:
-        await challenge_frame_locator.locator("//td[contains(@tabindex, '4')]").wait_for(timeout=10000)
+        await challenge_frame_locator.locator("//td[@id='0']").wait_for(timeout=10000)
     except Exception as e:
         print(f"Error waiting for image grid: {e}")
         return
