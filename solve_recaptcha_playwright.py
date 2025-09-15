@@ -33,7 +33,7 @@ CAPTCHA_URL = "https://www.google.com/recaptcha/api2/demo"
 THRESHOLD = 0.2
 USE_TOP_N_STRATEGY = False
 N = 3
-YOLO_CLASSES = ['bicycle', 'bridge', 'bus', 'car', 'chimney', 'crosswalk', 'hydrant', 'motorcycle', 'mountain', 'other', 'palm', 'traffic']
+YOLO_CLASSES = predict.get_class_names()
 CHINESE_TO_ENGLISH_MAPPING = {
     "公車": "bus",
     "行人穿越道": "crosswalk",
@@ -252,11 +252,16 @@ async def process_tile(page, i, captcha_object_text, class_index):
 
     filename = f"tile_{COUNT}.jpg"
     screenshot_path = os.path.join(data_dir, filename)
-    await tile_locator.screenshot(path=screenshot_path)
+    await tile_locator.screenshot(path=screenshot_path, animations="disabled")
 
     result = predict.predict_tile(screenshot_path)
+    predicted_index = result[2]
+    if predicted_index >= len(YOLO_CLASSES):
+        print(f"Warning: Model returned an out-of-bounds index: {predicted_index}")
+        object_name = "other"
+    else:
+        object_name = YOLO_CLASSES[predicted_index]
     current_object_probability = result[0][class_index]
-    object_name = YOLO_CLASSES[result[2]]
 
     # rename image
     os.rename(screenshot_path, os.path.join(data_dir, f"{object_name}_{filename}"))
@@ -434,7 +439,7 @@ async def solve_classification_type(page, dynamic_captcha):
 
     # Wait for the image grid to be visible before proceeding
     try:
-        await challenge_frame_locator.locator("//td[@id='0']").wait_for(timeout=10000)
+        await challenge_frame_locator.locator(".rc-imageselect-table-33").wait_for(timeout=10000)
     except Exception as e:
         print(f"Error waiting for image grid: {e}")
         return
