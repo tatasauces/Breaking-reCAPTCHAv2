@@ -432,6 +432,13 @@ async def solve_classification_type(page, dynamic_captcha):
         await click_element(reload_button_locator)
         return
 
+    # Wait for the image grid to be visible before proceeding
+    try:
+        await challenge_frame_locator.locator("//td[contains(@tabindex, '4')]").wait_for(timeout=10000)
+    except Exception as e:
+        print(f"Error waiting for image grid: {e}")
+        return
+
     if dynamic_captcha:
         log("dynamic", captcha_object_text)
     else:
