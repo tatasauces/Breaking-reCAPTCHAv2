@@ -353,14 +353,14 @@ def get_class_index(captcha_object_text):
     # If we have a mapped English name, find its index
     if english_class_name:
         for index, name in YOLO_CLASSES.items():
-            if name == english_class_name:
+            if name.lower() == english_class_name.lower():
                 return index
         return -1 # Mapped name not found in model's classes
 
     # If no direct Chinese match, search for an English class name as a substring
     # This handles cases like "Select all images with cars"
     for index, name in YOLO_CLASSES.items():
-        if name in captcha_object_text:
+        if name.lower() in captcha_object_text.lower():
             return index
 
     return -1
@@ -436,8 +436,6 @@ async def solve_classification_type(page, dynamic_captcha):
 
     captcha_object_locator = challenge_frame_locator.locator('#rc-imageselect strong')
     captcha_object_text = (await captcha_object_locator.inner_text()).strip()
-    print(f"DEBUG: Captcha object text: '{captcha_object_text}'")
-    print(f"DEBUG: YOLO_CLASSES from model: {YOLO_CLASSES}")
 
     class_index = get_class_index(captcha_object_text)
     if class_index == -1:
