@@ -435,11 +435,14 @@ async def solve_classification_type(page, dynamic_captcha):
     challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
 
     captcha_object_locator = challenge_frame_locator.locator('#rc-imageselect strong')
-    captcha_object_text = await captcha_object_locator.inner_text()
+    captcha_object_text = (await captcha_object_locator.inner_text()).strip()
+    print(f"DEBUG: Captcha object text: '{captcha_object_text}'")
+    print(f"DEBUG: YOLO_CLASSES from model: {YOLO_CLASSES}")
 
     class_index = get_class_index(captcha_object_text)
     if class_index == -1:
         print(f"Could not find class index for: {captcha_object_text}")
+        await page.wait_for_timeout(3000) # Wait before reloading
         reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
         await click_element(reload_button_locator)
         return
@@ -490,6 +493,7 @@ async def solve_recaptcha_on_page(page):
                 print("found a 3x3 one time selection captcha")
                 await solve_classification_type(page, False)
             else:
+                await page.wait_for_timeout(3000) # Wait before reloading
                 reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
                 await click_element(reload_button_locator)
                 continue
@@ -504,6 +508,7 @@ async def solve_recaptcha_on_page(page):
                 log("SOLVED", "captcha solved")
                 return True
             try:
+                await page.wait_for_timeout(3000) # Wait before reloading
                 challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
                 reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
                 await click_element(reload_button_locator)
