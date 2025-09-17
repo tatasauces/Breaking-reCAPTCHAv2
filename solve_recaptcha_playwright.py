@@ -479,22 +479,37 @@ async def solve_recaptcha_on_page(page):
     while True:
         try:
             challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
-            imageselect_text = await challenge_frame_locator.locator('#rc-imageselect').inner_text()
 
-            if "squares" in imageselect_text and TYPE2:
-                print("found a 4x4 segmentation problem")
-                await solve_type2(page)
-            elif "none" in imageselect_text and TYPE3:
-                print("found a 3x3 dynamic captcha")
-                await solve_classification_type(page, True)
-            elif TYPE1:
-                print("found a 3x3 one time selection captcha")
-                await solve_classification_type(page, False)
-            else:
+            # Wait for either grid to be ready
+            try:
+                await challenge_frame_locator.locator('.rc-imageselect-table-33, .rc-imageselect-table-44').first.wait_for(timeout=10000)
+            except Exception:
+                print("No image grid found. Reloading.")
                 await page.wait_for_timeout(3000) # Wait before reloading
                 reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
                 await click_element(reload_button_locator)
                 continue
+
+            # Now check which one is visible
+            is_4x4 = await challenge_frame_locator.locator(".rc-imageselect-table-44").is_visible()
+
+            if is_4x4 and TYPE2:
+                print("found a 4x4 segmentation problem")
+                await solve_type2(page)
+            else: # It should be a 3x3 grid
+                imageselect_text = await challenge_frame_locator.locator('#rc-imageselect').inner_text()
+
+                if "none" in imageselect_text and TYPE3:
+                    print("found a 3x3 dynamic captcha")
+                    await solve_classification_type(page, True)
+                elif TYPE1:
+                    print("found a 3x3 one time selection captcha")
+                    await solve_classification_type(page, False)
+                else:
+                    await page.wait_for_timeout(3000) # Wait before reloading
+                    reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
+                    await click_element(reload_button_locator)
+                    continue
 
             if await captcha_is_solved(page):
                 log("SOLVED", "captcha solved")
