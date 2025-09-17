@@ -369,7 +369,7 @@ async def captcha_is_solved(page):
     """
     Checks if the reCAPTCHA challenge is solved.
     """
-    await page.wait_for_timeout(1000)
+    await page.wait_for_timeout(3000)
     try:
         recaptcha_frame_locator = page.frame_locator("iframe[title='reCAPTCHA']")
         checkbox_locator = recaptcha_frame_locator.locator("#recaptcha-anchor")
@@ -467,6 +467,7 @@ async def solve_classification_type(page, dynamic_captcha):
     else:
         verify_button_locator = challenge_frame_locator.locator("#recaptcha-verify-button")
         await click_element(verify_button_locator)
+        await page.wait_for_timeout(2000) # Add a wait after clicking verify
 
 async def solve_recaptcha_on_page(page):
     """
