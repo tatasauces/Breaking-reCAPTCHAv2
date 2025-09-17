@@ -307,9 +307,9 @@ async def solve_type2(page):
     log("Type2", captcha_text)
 
     class_index = -1
-    for i in YOLO_CLASSES:
-        if i in captcha_text:
-            class_index = YOLO_CLASSES.index(i)
+    for index, name in YOLO_CLASSES.items():
+        if name in captcha_text:
+            class_index = index
             break
 
     if class_index == -1:
