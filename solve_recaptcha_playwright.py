@@ -16,6 +16,7 @@ The function will return `True` if the captcha is solved successfully, and `Fals
 import asyncio
 from playwright.async_api import async_playwright
 import os
+import random
 import requests
 from PIL import Image
 from io import BytesIO
@@ -279,11 +280,13 @@ async def process_tile(page, i, captcha_object_text, class_index):
     if USE_TOP_N_STRATEGY:
         top_n_indices = sorted(range(len(result[0])), key=lambda i: result[0][i], reverse=True)[:N]
         if class_index in top_n_indices:
+            await page.wait_for_timeout(random.randint(500, 1500))
             await click_element(tile_locator)
             return True
     else:
         if current_object_probability > THRESHOLD:
             print(f"{current_object_probability} > {THRESHOLD}")
+            await page.wait_for_timeout(random.randint(500, 1500))
             await click_element(tile_locator)
             return True
 
