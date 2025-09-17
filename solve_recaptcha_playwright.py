@@ -41,6 +41,7 @@ CHINESE_TO_ENGLISH_MAPPING = {
     "斑馬線": "crosswalk",
     "消防栓": "hydrant",
     "腳踏車": "bicycle",
+    "自行車": "bicycle",
     "機車": "motorcycle",
     "機車/腳踏車": "motorcycle", # Mapping to motorcycle for now
     "汽車": "car",
@@ -306,11 +307,7 @@ async def solve_type2(page):
 
     log("Type2", captcha_text)
 
-    class_index = -1
-    for index, name in YOLO_CLASSES.items():
-        if name in captcha_text:
-            class_index = index
-            break
+    class_index = get_class_index(captcha_text)
 
     if class_index == -1:
         print(f"Could not find class index for captcha text: {captcha_text}")
