@@ -301,7 +301,7 @@ async def solve_type2(page):
     xpath_image = "/html/body/div/div/div[2]/div[2]/div/table/tbody/tr[1]/td[1]/div/div[1]/img"
     xpath_text = "/html/body/div/div/div[2]/div[1]/div[1]/div/strong"
 
-    captcha_text_locator = challenge_frame_locator.locator(xpath_text)
+    captcha_text_locator = challenge_frame_locator.locator(f"xpath={xpath_text}")
     captcha_text = await captcha_text_locator.inner_text()
 
     log("Type2", captcha_text)
@@ -316,7 +316,7 @@ async def solve_type2(page):
         print(f"Could not find class index for captcha text: {captcha_text}")
         return
 
-    img_locator = challenge_frame_locator.locator(xpath_image)
+    img_locator = challenge_frame_locator.locator(f"xpath={xpath_image}")
     img_url = await img_locator.get_attribute("src")
 
     response = requests.get(img_url, stream=True)
@@ -333,7 +333,7 @@ async def solve_type2(page):
         tiles_to_click = [(i + 1, j + 1) for i in range(4) for j in range(4) if grid[i][j] == 1]
 
         for i, j in tiles_to_click:
-            tile_locator = challenge_frame_locator.locator(f"{xpath_tiles}/tr[{i}]/td[{j}]")
+            tile_locator = challenge_frame_locator.locator(f"xpath={xpath_tiles}/tr[{i}]/td[{j}]")
             await click_element(tile_locator)
             await page.wait_for_timeout(500) # a short delay
 
