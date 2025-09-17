@@ -303,7 +303,7 @@ async def solve_type2(page):
     xpath_text = "/html/body/div/div/div[2]/div[1]/div[1]/div/strong"
 
     captcha_text_locator = challenge_frame_locator.locator(f"xpath={xpath_text}")
-    captcha_text = await captcha_text_locator.inner_text()
+    captcha_text = (await captcha_text_locator.inner_text()).strip()
 
     log("Type2", captcha_text)
 
