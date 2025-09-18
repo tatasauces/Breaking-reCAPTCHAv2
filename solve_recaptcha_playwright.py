@@ -53,8 +53,8 @@ CHINESE_TO_ENGLISH_MAPPING = {
     "樹木": "palm", # Assuming tree maps to palm
     "樓梯": "stairs",
     "梯子": "stairs", # Assuming ladder maps to stairs
-    "紅綠燈": "traffic",
-    "交通號誌": "traffic",
+    "紅綠燈": "traffic light",
+    "交通號誌": "traffic light",
 }
 TYPE1 = True #one time image selection
 TYPE2 = True #segmentation problem
