@@ -462,6 +462,14 @@ async def solve_classification_type(page, dynamic_captcha):
         if await process_tile(page, i, captcha_object_text, class_index):
             to_check.append(i)
 
+    # If no tiles were clicked because confidence was too low, reload the challenge.
+    if not to_check:
+        print("No tiles were clicked with sufficient confidence. Reloading challenge.")
+        reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
+        await click_element(reload_button_locator)
+        await page.wait_for_timeout(2000) # Wait for new images to load
+        return # Exit this attempt and let the main loop try again on the new puzzle
+
     if dynamic_captcha:
         await handle_dynamic_captcha(page, captcha_object_text, class_index, to_check)
     else:
