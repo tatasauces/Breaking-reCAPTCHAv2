@@ -16,6 +16,7 @@ The function will return `True` if the captcha is solved successfully, and `Fals
 import asyncio
 from playwright.async_api import async_playwright
 import os
+import random
 import requests
 from PIL import Image
 from io import BytesIO
@@ -30,7 +31,7 @@ import traceback
 
 # Constants
 CAPTCHA_URL = "https://www.google.com/recaptcha/api2/demo"
-THRESHOLD = 0.2
+THRESHOLD = 0.5
 USE_TOP_N_STRATEGY = False
 N = 3
 YOLO_CLASSES = predict.get_class_names()
@@ -41,6 +42,7 @@ CHINESE_TO_ENGLISH_MAPPING = {
     "斑馬線": "crosswalk",
     "消防栓": "hydrant",
     "腳踏車": "bicycle",
+    "自行車": "bicycle",
     "機車": "motorcycle",
     "機車/腳踏車": "motorcycle", # Mapping to motorcycle for now
     "汽車": "car",
@@ -278,11 +280,13 @@ async def process_tile(page, i, captcha_object_text, class_index):
     if USE_TOP_N_STRATEGY:
         top_n_indices = sorted(range(len(result[0])), key=lambda i: result[0][i], reverse=True)[:N]
         if class_index in top_n_indices:
+            await page.wait_for_timeout(random.randint(500, 1500))
             await click_element(tile_locator)
             return True
     else:
         if current_object_probability > THRESHOLD:
             print(f"{current_object_probability} > {THRESHOLD}")
+            await page.wait_for_timeout(random.randint(500, 1500))
             await click_element(tile_locator)
             return True
 
@@ -301,22 +305,18 @@ async def solve_type2(page):
     xpath_image = "/html/body/div/div/div[2]/div[2]/div/table/tbody/tr[1]/td[1]/div/div[1]/img"
     xpath_text = "/html/body/div/div/div[2]/div[1]/div[1]/div/strong"
 
-    captcha_text_locator = challenge_frame_locator.locator(xpath_text)
-    captcha_text = await captcha_text_locator.inner_text()
+    captcha_text_locator = challenge_frame_locator.locator(f"xpath={xpath_text}")
+    captcha_text = (await captcha_text_locator.inner_text()).strip()
 
     log("Type2", captcha_text)
 
-    class_index = -1
-    for i in YOLO_CLASSES:
-        if i in captcha_text:
-            class_index = YOLO_CLASSES.index(i)
-            break
+    class_index = get_class_index(captcha_text)
 
     if class_index == -1:
         print(f"Could not find class index for captcha text: {captcha_text}")
         return
 
-    img_locator = challenge_frame_locator.locator(xpath_image)
+    img_locator = challenge_frame_locator.locator(f"xpath={xpath_image}")
     img_url = await img_locator.get_attribute("src")
 
     response = requests.get(img_url, stream=True)
@@ -333,7 +333,7 @@ async def solve_type2(page):
         tiles_to_click = [(i + 1, j + 1) for i in range(4) for j in range(4) if grid[i][j] == 1]
 
         for i, j in tiles_to_click:
-            tile_locator = challenge_frame_locator.locator(f"{xpath_tiles}/tr[{i}]/td[{j}]")
+            tile_locator = challenge_frame_locator.locator(f"xpath={xpath_tiles}/tr[{i}]/td[{j}]")
             await click_element(tile_locator)
             await page.wait_for_timeout(500) # a short delay
 
@@ -369,7 +369,7 @@ async def captcha_is_solved(page):
     """
     Checks if the reCAPTCHA challenge is solved.
     """
-    await page.wait_for_timeout(1000)
+    await page.wait_for_timeout(3000)
     try:
         recaptcha_frame_locator = page.frame_locator("iframe[title='reCAPTCHA']")
         checkbox_locator = recaptcha_frame_locator.locator("#recaptcha-anchor")
@@ -467,6 +467,7 @@ async def solve_classification_type(page, dynamic_captcha):
     else:
         verify_button_locator = challenge_frame_locator.locator("#recaptcha-verify-button")
         await click_element(verify_button_locator)
+        await page.wait_for_timeout(2000) # Add a wait after clicking verify
 
 async def solve_recaptcha_on_page(page):
     """
@@ -479,22 +480,37 @@ async def solve_recaptcha_on_page(page):
     while True:
         try:
             challenge_frame_locator = page.frame_locator('iframe[src*="bframe"]')
-            imageselect_text = await challenge_frame_locator.locator('#rc-imageselect').inner_text()
 
-            if "squares" in imageselect_text and TYPE2:
-                print("found a 4x4 segmentation problem")
-                await solve_type2(page)
-            elif "none" in imageselect_text and TYPE3:
-                print("found a 3x3 dynamic captcha")
-                await solve_classification_type(page, True)
-            elif TYPE1:
-                print("found a 3x3 one time selection captcha")
-                await solve_classification_type(page, False)
-            else:
+            # Wait for either grid to be ready
+            try:
+                await challenge_frame_locator.locator('.rc-imageselect-table-33, .rc-imageselect-table-44').first.wait_for(timeout=10000)
+            except Exception:
+                print("No image grid found. Reloading.")
                 await page.wait_for_timeout(3000) # Wait before reloading
                 reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
                 await click_element(reload_button_locator)
                 continue
+
+            # Now check which one is visible
+            is_4x4 = await challenge_frame_locator.locator(".rc-imageselect-table-44").is_visible()
+
+            if is_4x4 and TYPE2:
+                print("found a 4x4 segmentation problem")
+                await solve_type2(page)
+            else: # It should be a 3x3 grid
+                imageselect_text = await challenge_frame_locator.locator('#rc-imageselect').inner_text()
+
+                if "none" in imageselect_text and TYPE3:
+                    print("found a 3x3 dynamic captcha")
+                    await solve_classification_type(page, True)
+                elif TYPE1:
+                    print("found a 3x3 one time selection captcha")
+                    await solve_classification_type(page, False)
+                else:
+                    await page.wait_for_timeout(3000) # Wait before reloading
+                    reload_button_locator = challenge_frame_locator.locator("#recaptcha-reload-button")
+                    await click_element(reload_button_locator)
+                    continue
 
             if await captcha_is_solved(page):
                 log("SOLVED", "captcha solved")
